@@ -592,3 +592,27 @@ BOOL CAgoraObject::EnableWhiteboardFeq(BOOL bEnable)
 
 	return lStatus == ERROR_SUCCESS ? TRUE : FALSE;
 }
+
+BOOL CAgoraObject::SetVideoRenderType(int nType)
+{
+	int	nRet = 0;
+
+	AParameter apm(m_lpAgoraEngine);
+	switch (nType)
+	{
+	case 1:
+		nRet = apm->setInt("che.video.renderer.type", VideoRenderType::kRenderWindowsGDI);
+		break;
+	case 2:
+		nRet = apm->setInt("che.video.renderer.type", VideoRenderType::kRenderWindowsD3D);
+		break;
+	case 3:
+		nRet = apm->setInt("che.video.renderer.type", VideoRenderType::kRenderWindowsD2D);
+		break;
+	default:
+		nRet = apm->setInt("che.video.renderer.type", VideoRenderType::kRenderWindowsD3D);
+		break;
+	}
+
+	return nRet == 0 ? TRUE : FALSE;
+}

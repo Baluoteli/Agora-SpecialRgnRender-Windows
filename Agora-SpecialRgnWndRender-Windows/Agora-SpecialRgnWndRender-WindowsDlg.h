@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <gdiplusgraphics.h> 
+using namespace Gdiplus;
+#pragma comment(lib,"GdiPlus.lib")
 
 // CAgoraSpecialRgnWndRenderWindowsDlg dialog
 class CAgoraSpecialRgnWndRenderWindowsDlg : public CDialogEx
@@ -38,6 +41,8 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg void OnClose();
 	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 
@@ -53,4 +58,5 @@ private:
 
 	HWND m_RngRenderWnd;
 
+	ULONG_PTR m_gdiplusToken;
 };

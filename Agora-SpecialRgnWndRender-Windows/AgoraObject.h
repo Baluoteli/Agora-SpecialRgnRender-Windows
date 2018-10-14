@@ -21,6 +21,13 @@ using namespace agora::rtc;
 
 #define APP_ID _T("")
 
+enum VideoRenderType {
+	kRenderWindowsD3D = 7, // only for windows
+	kRenderWindowsD2D = 8, // only for windows
+	kRenderWindowsGDI = 9, // only for windows
+};
+
+
 class CAgoraObject
 {
 public:
@@ -95,7 +102,7 @@ public:
 	static BOOL EnableWhiteboardVer(BOOL bEnable);
 	static BOOL EnableWhiteboardFeq(BOOL bEnable);
 
-    
+	BOOL SetVideoRenderType(int nType);
 
 protected:
 	CAgoraObject(void);

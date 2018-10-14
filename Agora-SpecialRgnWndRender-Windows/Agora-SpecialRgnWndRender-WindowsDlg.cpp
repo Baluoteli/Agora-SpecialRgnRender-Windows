@@ -48,7 +48,8 @@ END_MESSAGE_MAP()
 
 
 CAgoraSpecialRgnWndRenderWindowsDlg::CAgoraSpecialRgnWndRenderWindowsDlg(CWnd* pParent /*=NULL*/)
-	: CDialogEx(CAgoraSpecialRgnWndRenderWindowsDlg::IDD, pParent)
+	: CDialogEx(CAgoraSpecialRgnWndRenderWindowsDlg::IDD, pParent),
+	m_gdiplusToken(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -64,6 +65,8 @@ BEGIN_MESSAGE_MAP(CAgoraSpecialRgnWndRenderWindowsDlg, CDialogEx)
 	ON_WM_CLOSE()
 	ON_WM_SHOWWINDOW()
 	ON_WM_QUERYDRAGICON()
+	ON_WM_ERASEBKGND()
+	ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 
@@ -144,8 +147,22 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::OnPaint()
 	else
 	{
 		DrawClient(&dc);
-	//	CDialogEx::OnPaint();
+		//	CDialogEx::OnPaint();
 	}
+}
+
+void CAgoraSpecialRgnWndRenderWindowsDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	if (1 == nIDEvent) {
+
+		ShowWindow(SW_SHOW);
+		//DrawClient(GetDC());
+	}
+}
+
+BOOL CAgoraSpecialRgnWndRenderWindowsDlg::OnEraseBkgnd(CDC* pDC)
+{
+	return FALSE;
 }
 
 // The system calls this function to obtain the cursor to display while the user drags
@@ -158,31 +175,42 @@ HCURSOR CAgoraSpecialRgnWndRenderWindowsDlg::OnQueryDragIcon()
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::initCtrl()
 {
-	m_RngRenderWnd = ::CreateWindow(L"Static", L"", WS_VISIBLE | WS_CHILD, 0,0,100,100,m_hWnd,NULL,NULL,NULL);
+	Gdiplus::GdiplusStartupInput startupInput;
+	Gdiplus::GdiplusStartup(&m_gdiplusToken, &startupInput,nullptr);
+
+	SetTimer(1, 40, NULL);
+	CenterWindow();
+	m_RngRenderWnd = ::CreateWindow(L"Static", L"", WS_CHILD, 0,0,100,100,m_hWnd,NULL,NULL,NULL);
 }
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::uninitCtrl()
 {
+	KillTimer(1);
 
+	Gdiplus::GdiplusShutdown(m_gdiplusToken);
+	m_gdiplusToken = 0;
 }
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::OnShowWindow(BOOL bShow, UINT nStatus)
 {
 	CRect rt;
-	GetClientRect(&rt);
+	GetWindowRect(&rt);
+	//::SetWindowPos(m_hWnd, wndTopMost, rt.left, rt.top, rt.Width(), rt.Height(), SWP_SHOWWINDOW);
 
 	CRect rt1;
-	GetWindowRect(&rt1);
-	MoveWindow(rt1.left, rt1.top, rt.bottom, rt1.bottom - rt1.top, TRUE);
-	::MoveWindow(m_RngRenderWnd, 0, 0, rt.bottom, rt.bottom, TRUE);
-	HRGN  hRgn = CreateEllipticRgn(rt.top, rt.top, rt.bottom, rt.bottom);
-	int nres = ::SetWindowRgn(m_RngRenderWnd, hRgn, TRUE);
-	m_lpAgoraObject->LocalVideoPreview(m_RngRenderWnd, TRUE);
+	GetClientRect(&rt1);
+
+	int nXPos = rt.left;
+	int nYpos = rt.top;
+	int nWidth = rt1.Height();
+	int nHeight = rt.Height();
+	MoveWindow(nXPos,nYpos,nWidth,nHeight, TRUE);
+	GetClientRect(&rt);
 }
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::initAgoraMediaRtc()
 {
-	m_strAppId = L""; //please iniput appId;
+	m_strAppId = L"0c0b4b61adf94de1befd7cdd78a50444"; //please iniput appId;
 	if (m_strAppId.IsEmpty())
 		return;
 	m_lpAgoraObject = CAgoraObject::GetAgoraObject((m_strAppId));
@@ -194,13 +222,14 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::initAgoraMediaRtc()
 
 	m_lpAgoraObject->SetLogFilePath();
 	m_lpAgoraObject->EnableVideo(TRUE);
+	m_lpAgoraObject->SetVideoRenderType(1);
 
 	m_lpRtcEngine->setChannelProfile(CHANNEL_PROFILE_TYPE::CHANNEL_PROFILE_LIVE_BROADCASTING);
 	m_lpRtcEngine->setClientRole(CLIENT_ROLE_TYPE::CLIENT_ROLE_BROADCASTER);
 
-	m_lpAgoraObject->LocalVideoPreview(m_RngRenderWnd, TRUE);
-	m_lpRtcEngine->startPreview();
-	m_lpAgoraObject->JoinChannel(L"test");
+// 	m_lpAgoraObject->LocalVideoPreview(m_hWnd, TRUE);
+// 	m_lpRtcEngine->startPreview();
+// 	m_lpAgoraObject->JoinChannel(L"test");
 }
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::uninitAgoraMediaRtc()
@@ -219,6 +248,48 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::uninitAgoraMediaRtc()
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::DrawClient(CDC *lpDC)
 {
+#if 0
+	CRect rt;
+	GetClientRect(&rt);
+	HDC hdc = lpDC->m_hDC;
+	HDC hMemDc = CreateCompatibleDC(hdc);
+	COLORREF colorCircle = RGB(153,124,3);
+	HBITMAP hBitMap = CreateCompatibleBitmap(hdc, rt.Width(), rt.Height());
+	HPEN hPen = CreatePen(PS_SOLID, 5, colorCircle);
+	HBRUSH hBrush = CreateSolidBrush(colorCircle);
+	HGDIOBJ hOldObj = SelectObject(hMemDc,hBitMap);
+	SelectObject(hMemDc, hPen);
+	//SelectObject(hMemDc, hBrush);
+
+	Ellipse(hMemDc, rt.left, rt.top, rt.right, rt.bottom);
+	MoveToEx(hMemDc, rt.left, rt.top, NULL);
+	//LineTo(hMemDc, rt.right, rt.bottom);
+
+	SetStretchBltMode(hdc, STRETCH_HALFTONE);
+	SetBkColor(hdc, RGB(255, 0, 0));
+	BitBlt(hdc, rt.left, rt.top, rt.Width(), rt.Height(), hMemDc, 0, 0, SRCCOPY);
+	SelectObject(hMemDc, hOldObj);
+
+	DeleteObject(hBitMap);
+	DeleteObject(hPen);
+	DeleteObject(hBrush);
+	DeleteObject(hMemDc);
+	ReleaseDC(lpDC);
+	DeleteDC(hMemDc);
+	
+	InvalidateRect(&rt);
+#else 
+	CRect rt;
+	GetClientRect(&rt);
+
+	Gdiplus::Graphics gr(lpDC->m_hDC);
+	Gdiplus::Pen pen(RGB(153, 124, 3));
+	
+	gr.DrawEllipse(&pen,rt.left,rt.top,rt.Width(),rt.Height());
+	InvalidateRect(&rt);
+
+#endif
+
 
 }
 
