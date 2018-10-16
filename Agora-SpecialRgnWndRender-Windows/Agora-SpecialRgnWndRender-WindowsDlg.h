@@ -8,6 +8,8 @@
 using namespace Gdiplus;
 #pragma comment(lib,"GdiPlus.lib")
 
+#include "ExtendVideoFrameObserver.h"
+
 // CAgoraSpecialRgnWndRenderWindowsDlg dialog
 class CAgoraSpecialRgnWndRenderWindowsDlg : public CDialogEx
 {
@@ -58,5 +60,6 @@ private:
 
 	HWND m_RngRenderWnd;
 
-	ULONG_PTR m_gdiplusToken;
+	ULONG_PTR m_gdiplusToken; 
+	CExtendVideoFrameObserver m_ExtendVideoFrame;
 };

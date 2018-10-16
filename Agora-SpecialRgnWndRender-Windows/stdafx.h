@@ -42,6 +42,8 @@
 
 #include <IAgoraRtcEngine.h>
 #include <IAgoraMediaEngine.h>
+#include "IAgoraRtcEngine2.h"
+using namespace agora::media;
 #include "AgoraObject.h"
 #include "AGEventDef.h"
 #include <afxdisp.h>

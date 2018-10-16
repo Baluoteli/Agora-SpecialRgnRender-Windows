@@ -616,3 +616,26 @@ BOOL CAgoraObject::SetVideoRenderType(int nType)
 
 	return nRet == 0 ? TRUE : FALSE;
 }
+
+BOOL CAgoraObject::EnableExtendVideoCapture(BOOL bEnable, IVideoFrameObserver* lpVideoFrameObserver)
+{
+	agora::util::AutoPtr<agora::media::IMediaEngine> mediaEngine;
+	mediaEngine.queryInterface(m_lpAgoraEngine, agora::AGORA_IID_MEDIA_ENGINE);
+
+	int nRet = 0;
+	AParameter apm(*m_lpAgoraEngine);
+
+	if (mediaEngine.get() == NULL)
+		return FALSE;
+
+	if (bEnable && lpVideoFrameObserver != NULL) {
+		//apm->setParameters("{\"che.video.local.camera_index\":1024}");
+		nRet = mediaEngine->registerVideoFrameObserver(lpVideoFrameObserver);
+	}
+	else {
+		nRet = mediaEngine->registerVideoFrameObserver(NULL);
+		apm->setParameters("{\"che.video.local.camera_index\":0}");
+	}
+
+	return nRet == 0 ? TRUE : FALSE;
+}

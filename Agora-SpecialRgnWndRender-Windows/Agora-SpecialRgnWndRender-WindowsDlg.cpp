@@ -6,10 +6,315 @@
 #include "Agora-SpecialRgnWndRender-Windows.h"
 #include "Agora-SpecialRgnWndRender-WindowsDlg.h"
 #include "afxdialogex.h"
+#include <io.h>
+#include <fcntl.h>
+#include <WinBase.h>
 
+#include "../LibYUV/include/libyuv.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+
+void ContructBhh(int nWidth, int nHeight, BITMAPFILEHEADER& bhh) //add 2010-9-04  
+{
+	int widthStep = (((nWidth * 24) + 31) & (~31)) / 8; //每行实际占用的大小（每行都被填充到一个4字节边界）  
+	bhh.bfType = ((WORD)('M' << 8) | 'B');  //'BM'  
+	bhh.bfSize = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER) + widthStep * nHeight;
+	bhh.bfReserved1 = 0;
+	bhh.bfReserved2 = 0;
+	bhh.bfOffBits = (DWORD)sizeof(BITMAPFILEHEADER) + (DWORD)sizeof(BITMAPINFOHEADER);
+}
+
+void ConstructBih(int nWidth, int nHeight, BITMAPINFOHEADER& bih)
+{
+	int widthStep = (((nWidth * 24) + 31) & (~31)) / 8;
+
+
+	bih.biSize = 40;       // header size  
+	bih.biWidth = nWidth;
+	bih.biHeight = nHeight;
+	bih.biPlanes = 1;
+	bih.biBitCount = 24;     // RGB encoded, 24 bit  
+	bih.biCompression = BI_RGB;   // no compression 非压缩  
+	bih.biSizeImage = widthStep*nHeight * 3;
+	bih.biXPelsPerMeter = 0;
+	bih.biYPelsPerMeter = 0;
+	bih.biClrUsed = 0;
+	bih.biClrImportant = 0;
+}
+
+int RGB24ToBMP(BYTE* pRGB24Src, BYTE* pBmpDest, int nWidth, int nHeight) {
+
+	int nLen = 0;
+
+	BITMAPINFOHEADER bih;
+	ConstructBih(nWidth, nHeight, bih);
+	BITMAPFILEHEADER bhh;
+	ContructBhh(nWidth, nHeight, bhh);
+
+	int widthStep = (((nWidth * 24) + 31) & (~31)) / 8; //每行实际占用的大小（每行都被填充到一个4字节边界）  
+	int DIBSize = widthStep * nHeight;  //buffer的大小 （字节为单位）  
+
+	memcpy(pBmpDest, (LPSTR)&bhh,sizeof(BITMAPFILEHEADER));
+	memcpy(pBmpDest + sizeof(BITMAPFILEHEADER), (LPSTR)&bih, sizeof(BITMAPINFOHEADER));
+	memcpy(pBmpDest, pRGB24Src, DIBSize);
+
+	nLen += sizeof(BITMAPINFOHEADER);
+	nLen += sizeof(BITMAPFILEHEADER);
+	nLen += DIBSize;
+
+	return nLen;
+
+	FILE* pFile = fopen("..\\bmp.bmp", "ab+");
+	if (pFile) {
+		fwrite(pBmpDest, 1, nLen, pFile);
+		fclose(pFile);
+	}
+}
+
+#define MAX_LEN (3*1280*720)
+#define POSITIVE_HEIGHT (1)
+
+#if 0
+/*12Bytes*/
+typedef struct                       /**** BMP file header structure ****/
+{
+	unsigned int   bfSize;           /* Size of file */
+	unsigned short bfReserved1;      /* Reserved */
+	unsigned short bfReserved2;      /* ... */
+	unsigned int   bfOffBits;        /* Offset to bitmap data */
+}BITMAPFILEHEADER;
+
+/*40Bytes*/
+typedef struct                       /**** BMP file info structure ****/
+{
+	unsigned int   biSize;           /* Size of info header */
+	int            biWidth;          /* Width of image */
+	int            biHeight;         /* Height of image */
+	unsigned short biPlanes;         /* Number of color planes */
+	unsigned short biBitCount;       /* Number of bits per pixel */
+	unsigned int   biCompression;    /* Type of compression to use */
+	unsigned int   biSizeImage;      /* Size of image data */
+	int            biXPelsPerMeter;  /* X pixels per meter */
+	int            biYPelsPerMeter;  /* Y pixels per meter */
+	unsigned int   biClrUsed;        /* Number of colors used */
+	unsigned int   biClrImportant;   /* Number of important colors */
+}BITMAPINFOHEADER;
+#endif
+
+int simplest_rgb24_to_bmp(BYTE* pRGB24, int w, int h, BYTE* pBmpBuffer)
+{
+	int s32Ret = 0;
+	char bfType[2] = { 'B', 'M' };
+	BITMAPFILEHEADER myHead;
+	BITMAPINFOHEADER myHeadInfo;
+	memset(&myHead, 0, sizeof(myHead));
+	memset(&myHeadInfo, 0, sizeof(myHeadInfo));
+	BYTE* readBuff4Ph = new BYTE[MAX_LEN];
+	ZeroMemory(readBuff4Ph, MAX_LEN);
+
+	/*myHead*/
+	int headerSize = sizeof(bfType) + sizeof(myHead) + sizeof(myHeadInfo);
+	myHead.bfSize = headerSize + w*h * 3;
+	myHead.bfOffBits = headerSize;
+
+	/*myHeadInfo*/
+	myHeadInfo.biSize = sizeof(myHeadInfo);
+	myHeadInfo.biWidth = w;
+
+#ifndef POSITIVE_HEIGHT
+	myHeadInfo.biHeight = -1 * h;
+#else
+	myHeadInfo.biHeight = h;
+#endif
+
+	myHeadInfo.biPlanes = 1;
+	myHeadInfo.biBitCount = 24;
+	myHeadInfo.biSizeImage = w*h * 3;
+
+	/*change R-G-B to B-G-R*/
+	int temp = 0;
+	for (int i = 0; i < (w*h); i++)
+	{
+		temp = *(pRGB24 + i * 3);
+		*(pRGB24 + i * 3) = *(pRGB24 + i * 3 + 2);
+		*(pRGB24 + i * 3 + 2) = temp;
+	}
+
+#ifdef POSITIVE_HEIGHT
+	for (int i = (h - 1), j = 0; i >= 0; i--, j++)
+	{
+		memcpy(readBuff4Ph + j*w * 3, pRGB24 + i*w * 3, w * 3);
+	}
+#endif
+
+	/*write-4 parts*/
+	int nLen = 0;
+	FILE* pFile = fopen("..\\bmp.bmp", "ab+");
+	s32Ret = fwrite(bfType, 1, sizeof(bfType), pFile); nLen += s32Ret;
+	s32Ret = fwrite(&myHead, 1, sizeof(myHead), pFile); nLen += s32Ret;
+	s32Ret = fwrite(&myHeadInfo, 1, sizeof(myHeadInfo), pFile); nLen += s32Ret;
+#ifdef POSITIVE_HEIGHT
+	s32Ret = fwrite(readBuff4Ph, 1, w*h * 3, pFile); nLen += s32Ret;
+#else
+	s32Ret = write(fd_bmp, pRGB24, w*h * 3);
+	if (s32Ret < 0)
+	{
+		printf("write pRGB24 failed!\n");
+		close(fd_bmp);
+		close(fd_ori);
+		return -1;
+	}
+	printf("write pRGB24 success!\n");
+#endif
+	fclose(pFile);
+	return nLen;
+}
+
+int simplest_rgb24_to_bmp(const char* rgb24Path, int w, int h, const char* bmpPath)
+{
+	int s32Ret = 0;
+	int fd_ori = -1;
+	int fd_bmp = -1;
+	int headerSize = 0;
+	int i = 0;//for circle
+	int j = 0;//for circle
+	unsigned char temp = 0;
+
+	unsigned char *readBuff = new unsigned char[MAX_LEN];
+	memset(readBuff, 0, sizeof(readBuff));
+
+#ifdef POSITIVE_HEIGHT
+	unsigned char *readBuff4Ph = new unsigned char[MAX_LEN];
+	memset(readBuff4Ph, 0, sizeof(readBuff4Ph));
+#endif
+
+	char bfType[2] = { 'B', 'M' };
+
+	BITMAPFILEHEADER myHead;
+	BITMAPINFOHEADER myHeadInfo;
+	memset(&myHead, 0, sizeof(myHead));
+	memset(&myHeadInfo, 0, sizeof(myHeadInfo));
+	printf("sizeof(myHead) = %d\n", sizeof(myHead));
+	printf("sizeof(myHeadInfo) = %d\n", sizeof(myHeadInfo));
+
+	/*myHead*/
+	headerSize = sizeof(bfType) + sizeof(myHead) + sizeof(myHeadInfo);
+	myHead.bfSize = headerSize + w*h * 3;
+	myHead.bfOffBits = headerSize;
+
+	/*myHeadInfo*/
+	myHeadInfo.biSize = sizeof(myHeadInfo);
+	myHeadInfo.biWidth = w;
+
+#ifndef POSITIVE_HEIGHT
+	myHeadInfo.biHeight = -1 * h;
+#else
+	myHeadInfo.biHeight = h;
+#endif
+
+	myHeadInfo.biPlanes = 1;
+	myHeadInfo.biBitCount = 24;
+	myHeadInfo.biSizeImage = w*h * 3;
+
+	/*open files*/
+	fd_ori = _open(rgb24Path, O_RDONLY);
+	if (fd_ori < 0)
+	{
+		printf("open rgb24 failed!\n");
+		return -1;
+	}
+	printf("open rgb24 success!\n");
+
+	fd_bmp = _open(bmpPath, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND, 777);
+	if (fd_bmp < 0)
+	{
+		printf("open bmp failed!\n");
+		_close(fd_ori);
+		return -1;
+	}
+	printf("open bmp success!\n");
+
+	/*read*/
+	memset(readBuff, 0, sizeof(readBuff));
+	s32Ret = _read(fd_ori, readBuff, sizeof(readBuff));
+	if ((s32Ret < 0) || (s32Ret != w*h * 3))
+	{
+		printf("read RGB file failed!\n");
+		_close(fd_bmp);
+		_close(fd_ori);
+		return -1;
+	}
+	printf("read RGB file success!\n");
+
+	/*change R-G-B to B-G-R*/
+	for (i = 0; i < (w*h); i++)
+	{
+		temp = *(readBuff + i * 3);
+		*(readBuff + i * 3) = *(readBuff + i * 3 + 2);
+		*(readBuff + i * 3 + 2) = temp;
+	}
+
+	/*positive height storage sequence:left-right down-up*/
+#ifdef POSITIVE_HEIGHT
+	for (i = (h - 1), j = 0; i >= 0; i--, j++)
+	{
+		memcpy(readBuff4Ph + j*w * 3, readBuff + i*w * 3, w * 3);
+	}
+#endif
+
+	/*write-4 parts*/
+	s32Ret = _write(fd_bmp, bfType, sizeof(bfType));
+	if (s32Ret < 0)
+	{
+		printf("write bfType failed!\n");
+		_close(fd_bmp);
+		_close(fd_ori);
+		return -1;
+	}
+	s32Ret = _write(fd_bmp, &myHead, sizeof(myHead));
+	if (s32Ret < 0)
+	{
+		printf("write myHead failed!\n");
+		_close(fd_bmp);
+		_close(fd_ori);
+		return -1;
+	}
+	s32Ret = _write(fd_bmp, &myHeadInfo, sizeof(myHeadInfo));
+	if (s32Ret < 0)
+	{
+		printf("write myHeadInfo failed!\n");
+		_close(fd_bmp);
+		_close(fd_ori);
+		return -1;
+	}
+#ifdef POSITIVE_HEIGHT
+	s32Ret = _write(fd_bmp, readBuff4Ph, w*h * 3);
+	if (s32Ret < 0)
+	{
+		printf("write readBuff4Ph failed!\n");
+		_close(fd_bmp);
+		_close(fd_ori);
+		return -1;
+	}
+	printf("write readBuff4Ph success!\n");
+#else
+	s32Ret = _write(fd_bmp, readBuff, w*h * 3);
+	if (s32Ret < 0)
+	{
+		printf("write readBuff failed!\n");
+		_close(fd_bmp);
+		_close(fd_ori);
+		return -1;
+	}
+	printf("write readBuff success!\n");
+#endif
+
+	delete[] readBuff4Ph; readBuff4Ph = NULL;
+	_close(fd_bmp);
+	_close(fd_ori);
+	return 0;
+}
 
 
 // CAboutDlg dialog used for App About
@@ -147,6 +452,9 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::OnPaint()
 	else
 	{
 		DrawClient(&dc);
+		CRect rt;
+		GetClientRect(&rt);
+		InvalidateRect(&rt, TRUE);
 		//	CDialogEx::OnPaint();
 	}
 }
@@ -162,7 +470,7 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::OnTimer(UINT_PTR nIDEvent)
 
 BOOL CAgoraSpecialRgnWndRenderWindowsDlg::OnEraseBkgnd(CDC* pDC)
 {
-	return FALSE;
+	return TRUE;
 }
 
 // The system calls this function to obtain the cursor to display while the user drags
@@ -175,6 +483,7 @@ HCURSOR CAgoraSpecialRgnWndRenderWindowsDlg::OnQueryDragIcon()
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::initCtrl()
 {
+	SetBackgroundColor(RGB(255,0,0));
 	Gdiplus::GdiplusStartupInput startupInput;
 	Gdiplus::GdiplusStartup(&m_gdiplusToken, &startupInput,nullptr);
 
@@ -204,6 +513,8 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::OnShowWindow(BOOL bShow, UINT nStatus)
 	int nYpos = rt.top;
 	int nWidth = rt1.Height();
 	int nHeight = rt.Height();
+	nWidth = 360;
+	nHeight = 360;
 	MoveWindow(nXPos,nYpos,nWidth,nHeight, TRUE);
 	GetClientRect(&rt);
 }
@@ -227,9 +538,11 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::initAgoraMediaRtc()
 	m_lpRtcEngine->setChannelProfile(CHANNEL_PROFILE_TYPE::CHANNEL_PROFILE_LIVE_BROADCASTING);
 	m_lpRtcEngine->setClientRole(CLIENT_ROLE_TYPE::CLIENT_ROLE_BROADCASTER);
 
-// 	m_lpAgoraObject->LocalVideoPreview(m_hWnd, TRUE);
-// 	m_lpRtcEngine->startPreview();
-// 	m_lpAgoraObject->JoinChannel(L"test");
+	m_lpAgoraObject->EnableExtendVideoCapture(TRUE, &m_ExtendVideoFrame);
+
+  //	m_lpAgoraObject->LocalVideoPreview(m_hWnd, TRUE);
+ 	m_lpRtcEngine->startPreview();
+  	m_lpAgoraObject->JoinChannel(L"test");
 }
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::uninitAgoraMediaRtc()
@@ -247,50 +560,93 @@ void CAgoraSpecialRgnWndRenderWindowsDlg::uninitAgoraMediaRtc()
 }
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::DrawClient(CDC *lpDC)
-{
-#if 0
+{	
+	int nBufferWidth = 1280; int nBufferHeight = 720; UINT uIdLocal = 0;
+	int nBufferOutLen = nBufferWidth * nBufferHeight * 3 / 2;
+	BYTE *pBufferOutYUV = new BYTE[nBufferOutLen];
+	ZeroMemory(pBufferOutYUV, nBufferOutLen);
+	if (!CBufferMgr::getInstance()->popYUVBuffer(uIdLocal, pBufferOutYUV, nBufferOutLen, nBufferWidth, nBufferHeight)) {
+		delete[] pBufferOutYUV; pBufferOutYUV = nullptr;
+		return;
+	}
+
+	int nYStride = nBufferWidth;
+	int nUStride = nBufferWidth / 2;
+	int nVStride = nBufferWidth / 2;
+	uint8_t* pBufferY = (uint8_t*)pBufferOutYUV;
+	uint8_t* pBufferU = (uint8_t*)pBufferOutYUV + nYStride * nBufferHeight;
+	uint8_t* pBufferV = pBufferU + nUStride * nBufferHeight / 2;
+	nBufferOutLen = nBufferWidth * nBufferHeight * 3 / 2;
+	
+	BYTE *pBufferOutRGB24 = new BYTE[nBufferOutLen * 2];
+	ZeroMemory(pBufferOutRGB24, nBufferOutLen * 2);
+	CONVERT_YUV420PtoRGB24(pBufferOutYUV, pBufferOutRGB24, nBufferWidth, nBufferHeight);
+	CHANGE_ENDIAN_PIC(pBufferOutRGB24,nBufferWidth,nBufferHeight,24);
+	
+	BITMAPINFO m_bmphdr = { 0 };
+	DWORD dwBmpHdr = sizeof(BITMAPINFO);
+	m_bmphdr.bmiHeader.biBitCount = 24;
+	m_bmphdr.bmiHeader.biClrImportant = 0;
+	m_bmphdr.bmiHeader.biSize = dwBmpHdr;
+	m_bmphdr.bmiHeader.biSizeImage = 0;
+	m_bmphdr.bmiHeader.biWidth = nBufferWidth;
+	m_bmphdr.bmiHeader.biHeight = nBufferHeight;
+	m_bmphdr.bmiHeader.biXPelsPerMeter = 0;
+	m_bmphdr.bmiHeader.biYPelsPerMeter = 0;
+	m_bmphdr.bmiHeader.biClrUsed = 0;
+	m_bmphdr.bmiHeader.biPlanes = 1;
+	m_bmphdr.bmiHeader.biCompression = BI_RGB;
+
 	CRect rt;
 	GetClientRect(&rt);
-	HDC hdc = lpDC->m_hDC;
+	HDC hdc = ::GetWindowDC(m_hWnd);
 	HDC hMemDc = CreateCompatibleDC(hdc);
-	COLORREF colorCircle = RGB(153,124,3);
-	HBITMAP hBitMap = CreateCompatibleBitmap(hdc, rt.Width(), rt.Height());
-	HPEN hPen = CreatePen(PS_SOLID, 5, colorCircle);
-	HBRUSH hBrush = CreateSolidBrush(colorCircle);
-	HGDIOBJ hOldObj = SelectObject(hMemDc,hBitMap);
-	SelectObject(hMemDc, hPen);
-	//SelectObject(hMemDc, hBrush);
+	HBITMAP hMemBitMap = CreateCompatibleBitmap(hdc, rt.Width(), rt.Height());
+	HGLOBAL hOldObj = SelectObject(hMemDc, hMemBitMap);
 
-	Ellipse(hMemDc, rt.left, rt.top, rt.right, rt.bottom);
-	MoveToEx(hMemDc, rt.left, rt.top, NULL);
-	//LineTo(hMemDc, rt.right, rt.bottom);
+	int nDcX = 0; int nDcY = 0; int nDcWidth = rt.Width(); int nDcHeight = rt.Height();
+	int nResult = StretchDIBits(hMemDc,
+		nDcX, nDcY,
+		nDcWidth, nDcHeight,
+		(nBufferWidth - nDcWidth ) /2, (nBufferHeight - nDcHeight ) /	2,
+		nBufferHeight, nBufferHeight,
+		pBufferOutRGB24,
+		&m_bmphdr,
+		DIB_RGB_COLORS,
+		SRCCOPY);
 
-	SetStretchBltMode(hdc, STRETCH_HALFTONE);
-	SetBkColor(hdc, RGB(255, 0, 0));
+	Graphics *graphics = Graphics::FromHDC(hMemDc);
+	Image *pImage = Image::FromFile(_T("Combined Shape.png"));
+	if (Gdiplus::Ok != pImage->GetLastStatus())
+		return;
+
+	Gdiplus::Pen pen(Color(153, 124, 3),3);
+
+	POINT imRotateCenterPos = { rt.Width() / 2, rt.Height() / 2 };
+	CRect rcShow(rt);
+	PointF centerPos(imRotateCenterPos.x + rcShow.left, imRotateCenterPos.y + rcShow.top);
+	graphics->TranslateTransform(centerPos.X, centerPos.Y);
+	graphics->RotateTransform(0);
+	graphics->TranslateTransform(-centerPos.X, -centerPos.Y);
+	graphics->DrawImage(pImage, rt.left, rt.top, rt.Width(), rt.Height());
+
+	graphics->SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+	graphics->DrawEllipse(&pen, rt.left, rt.top, rt.Width(), rt.Height());
+
 	BitBlt(hdc, rt.left, rt.top, rt.Width(), rt.Height(), hMemDc, 0, 0, SRCCOPY);
-	SelectObject(hMemDc, hOldObj);
 
-	DeleteObject(hBitMap);
-	DeleteObject(hPen);
-	DeleteObject(hBrush);
-	DeleteObject(hMemDc);
-	ReleaseDC(lpDC);
-	DeleteDC(hMemDc);
-	
-	InvalidateRect(&rt);
-#else 
-	CRect rt;
-	GetClientRect(&rt);
+	graphics->ReleaseHDC(hMemDc);
+	::ReleaseDC(m_hWnd, hdc);
+	::DeleteObject(hMemDc);
+	::DeleteObject(hMemBitMap);
 
-	Gdiplus::Graphics gr(lpDC->m_hDC);
-	Gdiplus::Pen pen(RGB(153, 124, 3));
-	
-	gr.DrawEllipse(&pen,rt.left,rt.top,rt.Width(),rt.Height());
-	InvalidateRect(&rt);
+	delete[] pBufferOutYUV;
+	pBufferOutYUV = NULL;
+	delete[] pBufferOutRGB24;
+	pBufferOutRGB24 = NULL;
 
-#endif
-
-
+	Sleep(40);
+	InvalidateRect(&rt, TRUE);
 }
 
 void CAgoraSpecialRgnWndRenderWindowsDlg::OnClose()

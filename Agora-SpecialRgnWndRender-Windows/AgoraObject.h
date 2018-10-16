@@ -103,6 +103,7 @@ public:
 	static BOOL EnableWhiteboardFeq(BOOL bEnable);
 
 	BOOL SetVideoRenderType(int nType);
+	BOOL EnableExtendVideoCapture(BOOL bEnable, IVideoFrameObserver* lpVideoFrameObserver);
 
 protected:
 	CAgoraObject(void);
